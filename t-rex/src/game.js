@@ -1,3 +1,5 @@
+const tf = require('@tensorflow/tfjs')
+
 const randomBetween = (min, max) => Math.floor(Math.random()*(max-min+1)+min)
 
 class drawFabric {
@@ -250,6 +252,38 @@ class Game {
   
   run() {
     this.update()
+  }
+}
+
+class Brain {
+  constructor(props) {
+    this.model = tf.sequential()
+
+    this.model.add(tf.layers.dense({
+      inputShape: [3], // speed of the game, the width of the oncoming obstacle and it’s distance from our dino
+      activation: 'sigmoid',
+      units: 6
+    }))
+
+    this.model.add(tf.layers.dense({
+      inputShape: [6],
+      activation: 'sigmoid',
+      units: 2 // jump [0,1] and not jump [1,0]
+    }))
+
+    this.model.compile({
+      loss:'meanSquaredError',
+      optimizer : tf.train.adam(0.1)
+    })
+
+    this.training = {
+      inputs: [],
+      labels: []
+    }
+  }
+
+  trainModel() {
+    this.model.fit(tf.tensor2d(this.training.inputs),tf.tensor2d(this.training.labels))
   }
 }
 

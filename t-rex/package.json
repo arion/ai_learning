@@ -1,0 +1,20 @@
+{
+  "name": "t-rex",
+  "version": "1.0.0",
+  "description": "",
+  "main": "brain.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "webpack": "^4.39.3",
+    "webpack-cli": "^3.3.8"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^1.2.9"
+  }
+}
