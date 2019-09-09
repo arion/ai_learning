@@ -57,10 +57,10 @@ class Runner {
     const defaultProps = {
       left: 30,
       bottom: 20, 
-      height: 50,
-      width: 30,
-      gravity: 3.5,
-      jumpHeight: 80,
+      height: 40,
+      width: 20,
+      gravity: 5,
+      jumpHeight: 100,
       florLevel: 20,
       goesUp: false,
     }
@@ -101,13 +101,13 @@ class Runner {
 
 class Tree {
   constructor(props) {
-    let width = 20
-    let height = 40
+    let width = 10
+    let height = 28
     if (props.size == 'small') {
-      width = 15
-      height = 30
+      width = 10
+      height = 18
     }
-    const right = 0 - ((props.position + 1) * (width + 3))
+    const right = 0 - ((props.position + 1) * (width + 1))
 
     const defaultProps = {
       right,
@@ -148,16 +148,15 @@ class Game {
     Object.assign(this, defaultProps)
     Object.assign(this, props)
 
-    document.addEventListener("keydown", (key) => this.jump(key))
+    document.addEventListener("keydown", (key) => {
+      if (key.code !== 'Space') { return }
+      this.jump()
+    })
   }
 
-  jump(key) {
-    if (key.code !== 'Space') { return }
+  jump() {
     if (!this.started) { 
-      this.started = true
-      this.msec = 0
-      this.trees = []
-      this.speed = 5
+      this.reset()
     }
     this.runner.jump()
   }
@@ -168,7 +167,7 @@ class Game {
   }
 
   drawMaxScore () {
-    this.canvas.text(`HI ${(this.maxScore + '').padStart(5, '0')}`, { right: 70, top: 20, color: 'Gray' })
+    this.canvas.text(`IT ${(this.brain.iteration + '').padStart(3, '0')} HI ${(this.maxScore + '').padStart(5, '0')}`, { right: 70, top: 20, color: 'Gray' })
   }
 
   drawRunner() {
@@ -183,7 +182,7 @@ class Game {
   canAddTree(score) {
     // if (score < 5) { return false }
     if (!this.trees.length) { return true }
-    const distanceEnought = this.trees.slice(-1)[0].right > randomBetween(300, 1000)
+    const distanceEnought = this.trees.slice(-1)[0].right > randomBetween(200, 1000)
     return (distanceEnought)
   }
 
@@ -199,33 +198,75 @@ class Game {
 
     switch (treeType) {
       case 1:
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0}))
-        break;
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0, count: 1}))
+        break
       case 2:
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0}))
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 1}))
-        break;
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0, count: 2}))
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 1, count: 2}))
+        break
       case 3:
-        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 0}))
-        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 1}))
-        break;
+        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 0, count: 3}))
+        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 1, count: 3}))
+        break
       case 4:
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0}))
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 1}))
-        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 2}))
-        break;
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 0, count: 3}))
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 1, count: 3}))
+        this.trees.push(new Tree({...baseAttrs, size: 'small', position: 2, count: 3}))
+        break
       default:
-        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 0}))
+        this.trees.push(new Tree({...baseAttrs, size: 'big', position: 0, count: 1}))
     }
   }
 
   drawTrees() {
     this.trees = this.trees.filter((t) => t.right < 1000)
     this.trees.map((tree) => {
-      if (this.runner.collision(tree) && !this.god) { this.started = false }
+      if (this.runner.collision(tree) && !this.god) { this.crash() }
       if (this.started) { tree.update() }
       tree.draw()
     })
+  }
+
+  crash() {
+    if (this.started) {
+      this.started = false
+
+      this.brain.onCrash(this.runner, this)
+    }
+  }
+
+  reset() {
+    this.started = true
+    this.msec = 0
+    this.trees = []
+    this.speed = 5
+  }
+
+  getState() {
+    let state = null
+    this.trees.map((tree) => {
+      const treeLeft = this.canvas.width - tree.right - tree.width
+      const distance = treeLeft - (this.runner.left + this.runner.width)
+      
+      if ((distance + tree.width) > 0 && !state) {
+        state = {
+          distance: distance,
+          height: tree.height,
+          width: tree.count * (tree.width + 1),
+          speed: this.speed
+        }
+      }
+    })
+    return state
+  }
+
+  running() {
+    const state = this.getState()
+    if (state && this.started) {
+      this.brain.onRunning(this.runner, state).then((shouldJump) => {
+        if (shouldJump) { this.jump() }
+      })
+    }
   }
 
   update() {
@@ -239,6 +280,8 @@ class Game {
       if (this.canAddTree(score)) {
         this.addTree()
       }
+
+      this.running()
     }
     
     this.drawScore(score)
@@ -259,14 +302,18 @@ class Brain {
   constructor(props) {
     this.model = tf.sequential()
 
+    this.iteration = 0
+
+    this.lastState = {}
+
     this.model.add(tf.layers.dense({
-      inputShape: [3], // speed of the game, the width of the oncoming obstacle and it’s distance from our dino
+      inputShape: [4], // speed of the game, the width of the oncoming obstacle and it’s distance from our dino
       activation: 'sigmoid',
       units: 6
     }))
 
     this.model.add(tf.layers.dense({
-      inputShape: [6],
+      inputShape: [8],
       activation: 'sigmoid',
       units: 2 // jump [0,1] and not jump [1,0]
     }))
@@ -282,12 +329,51 @@ class Brain {
     }
   }
 
-  trainModel() {
+  onCrash(runner, game) {
+    let input = Object.values(this.lastState)
+    let label = null
+    if (runner.inAir()) {
+      label = [1, 0] // should not jump
+    } else {
+      label = [0, 1] // should jump
+    }
+    this.training.inputs.push(input)
+    this.training.labels.push(label)
+
+    this._trainModel()
+    setTimeout(() => this.runGame(game), 1000)
+  }
+
+  runGame(game) {
+    game.jump()
+    this.iteration += 1
+  }
+
+  onRunning(runner, state) {
+    return new Promise((resolve) => {
+      let shouldJump = false
+      if (!runner.inAir()) {
+        const prediction = this.model.predict(tf.tensor2d([Object.values(state)]))
+        const predictionPromise = prediction.data()
+        predictionPromise.then((result) => {
+          if (result[1] > result[0]) {
+            shouldJump = true
+          }
+          this.lastState = state
+          resolve(shouldJump)
+        })
+      }
+    })
+  }
+
+  _trainModel() {
     this.model.fit(tf.tensor2d(this.training.inputs),tf.tensor2d(this.training.labels))
   }
 }
 
 const canvas = new drawFabric('game')
+const brain = new Brain()
 
-const game = new Game({canvas})
+const game = new Game({canvas, brain})
 game.run()
+brain.runGame(game)
